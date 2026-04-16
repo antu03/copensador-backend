@@ -21,26 +21,65 @@ async function getAccessToken() {
 }
 
 // ── Ejecutar DAX ───────────────────────────────────────────────────
+async function executeDAX(query, workspaceId, datasetId) {
+  const wsId = workspaceId || process.env.WORKSPACE_ID;
+  const dsId = datasetId || process.env.DATASET_ID;
+  const token = await getAccessToken();
+  const url = `https://api.powerbi.com/v1.0/myorg/groups/${wsId}/datasets/${dsId}/executeQueries`;
+  const response = await axios.post(url,
+    { queries: [{ query }], serializerSettings: { includeNulls: true } },
+    { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+  );
+  return response.data;
+}
+
+// ── REST endpoint original ─────────────────────────────────────────
 app.post('/dax', async (req, res) => {
   try {
     const { query, workspaceId, datasetId } = req.body;
     if (!query) return res.status(400).json({ error: 'query requerida' });
+    const result = await executeDAX(query, workspaceId, datasetId);
+    res.json(result);
+  } catch (error) {
+    console.error(error?.response?.data || error.message);
+    res.status(500).json({ error: error?.response?.data || error.message });
+  }
+});
 
-    // Usa los IDs del request si vienen, sino los del .env como fallback
-    const wsId = workspaceId || process.env.WORKSPACE_ID;
-    const dsId = datasetId || process.env.DATASET_ID;
+// ── MCP endpoint ───────────────────────────────────────────────────
+app.get('/mcp', (req, res) => {
+  res.json({
+    name: 'Copensador DAX API',
+    version: '1.0.0',
+    description: 'Ejecuta queries DAX contra modelos semánticos de Power BI',
+    tools: [
+      {
+        name: 'ejecutar_dax',
+        description: 'Ejecuta una query DAX contra el modelo semántico de Power BI y retorna los resultados',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Query DAX a ejecutar' },
+            workspaceId: { type: 'string', description: 'ID del workspace de Power BI' },
+            datasetId: { type: 'string', description: 'ID del dataset de Power BI' }
+          },
+          required: ['query']
+        }
+      }
+    ]
+  });
+});
 
-    if (!wsId || !dsId) return res.status(400).json({ error: 'workspaceId y datasetId requeridos' });
-
-    const token = await getAccessToken();
-    const url = `https://api.powerbi.com/v1.0/myorg/groups/${wsId}/datasets/${dsId}/executeQueries`;
-
-    const response = await axios.post(url,
-      { queries: [{ query }], serializerSettings: { includeNulls: true } },
-      { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
-    );
-
-    res.json(response.data);
+app.post('/mcp', async (req, res) => {
+  try {
+    const { tool, input } = req.body;
+    if (tool !== 'ejecutar_dax') {
+      return res.status(400).json({ error: 'Herramienta no reconocida' });
+    }
+    const { query, workspaceId, datasetId } = input;
+    if (!query) return res.status(400).json({ error: 'query requerida' });
+    const result = await executeDAX(query, workspaceId, datasetId);
+    res.json({ result });
   } catch (error) {
     console.error(error?.response?.data || error.message);
     res.status(500).json({ error: error?.response?.data || error.message });
