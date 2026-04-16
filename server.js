@@ -23,11 +23,17 @@ async function getAccessToken() {
 // ── Ejecutar DAX ───────────────────────────────────────────────────
 app.post('/dax', async (req, res) => {
   try {
-    const { query } = req.body;
+    const { query, workspaceId, datasetId } = req.body;
     if (!query) return res.status(400).json({ error: 'query requerida' });
 
+    // Usa los IDs del request si vienen, sino los del .env como fallback
+    const wsId = workspaceId || process.env.WORKSPACE_ID;
+    const dsId = datasetId || process.env.DATASET_ID;
+
+    if (!wsId || !dsId) return res.status(400).json({ error: 'workspaceId y datasetId requeridos' });
+
     const token = await getAccessToken();
-    const url = `https://api.powerbi.com/v1.0/myorg/groups/${process.env.WORKSPACE_ID}/datasets/${process.env.DATASET_ID}/executeQueries`;
+    const url = `https://api.powerbi.com/v1.0/myorg/groups/${wsId}/datasets/${dsId}/executeQueries`;
 
     const response = await axios.post(url,
       { queries: [{ query }], serializerSettings: { includeNulls: true } },
